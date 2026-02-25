@@ -25,7 +25,7 @@
 <script type="text/babel" data-type="module">
 const { useState, useEffect, useCallback, useRef } = React;
 
-const APP_VERSION = "3.5.1"; // Show saved attachments when loading from history, null fix for lease outcome reset
+const APP_VERSION = "3.5.2"; // Fallback attachment lookup from document library
 console.log(`[AMI] v${APP_VERSION} loaded`);
 const CONFIG = {
   clientId: "32e75ffa-747a-4cf0-8209-6a19150c4547",
@@ -168,6 +168,26 @@ async function cfgSave(tok,counties,properties,users,modBy){const lid=await getL
 async function getDriveId(tok){const r=await fetch(`${GRAPH}/sites/${CONFIG.siteId}/drives`,{headers:{Authorization:`Bearer ${tok}`}});if(!r.ok)return null;const d=await r.json();return d.value?.find(dr=>dr.name===CONFIG.docLibName)?.id||null}
 async function uploadFile(tok,driveId,folderName,file){const url=`${GRAPH}/drives/${driveId}/root:/${encodeURIComponent(folderName)}/${encodeURIComponent(file.name)}:/content`;const r=await fetch(url,{method:"PUT",headers:{Authorization:`Bearer ${tok}`,"Content-Type":file.type||"application/octet-stream"},body:file});if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e?.error?.message||`Upload failed: ${r.status}`)}const d=await r.json();return{name:file.name,url:d.webUrl,size:d.size}}
 async function uploadFiles(tok,folderName,files){const driveId=await getDriveId(tok);if(!driveId)throw new Error("Document library not found. Run the PowerShell setup script.");const results=[];for(const f of files){results.push(await uploadFile(tok,driveId,folderName,f))}return results}
+
+// Fallback: look up attachments from document library when AttachmentURLs field is empty
+async function lookupAttachmentsFromDrive(tok,rec){
+  try{
+    const driveId=await getDriveId(tok);if(!driveId)return[];
+    // Reconstruct the folder name pattern from record fields
+    const property=(rec.Property||"").replace(/[^a-zA-Z0-9_-]/g,"_");
+    const unit=(rec.UnitAddress||"unit").replace(/[^a-zA-Z0-9_-]/g,"_");
+    const date=rec.DateCompleted?rec.DateCompleted.slice(0,10):"";
+    // Try applicant name from record
+    const applicant=(rec.ApplicantName?.split(",")[0]||"applicant").replace(/[^a-zA-Z0-9_-]/g,"_");
+    const folderName=`${property}_${unit}_${applicant}_${date}`;
+    // List files in the folder
+    const url=`${GRAPH}/drives/${driveId}/root:/${encodeURIComponent(folderName)}:/children?$select=name,webUrl,size`;
+    const r=await fetch(url,{headers:{Authorization:`Bearer ${tok}`}});
+    if(!r.ok)return[];
+    const d=await r.json();
+    return(d.value||[]).map(f=>({name:f.name,url:f.webUrl,size:f.size}));
+  }catch(e){console.warn("[AMI] Drive attachment lookup failed:",e);return[]}
+}
 
 // ============================================================
 // EMAIL NOTIFICATION SYSTEM
@@ -1649,7 +1669,15 @@ window.AMICalculator = function AMICalculator(){
     const events=savedEvents.length>0?savedEvents:builtEvents;
     setAuditTrail({submittedBy:rec.SubmittedBy||"",submittedByName:rec.SubmittedByName||rec.SubmittedBy||"",submittedDate:rec.DateCompleted||"",reviewedBy:rec.ReviewedBy||"",reviewedByName:rec.ReviewedByName||rec.ReviewedBy||"",reviewDate:rec.ReviewDate||"",reviewNotes:rec.ReviewNotes||"",overrideBy:rec.OverrideBy||rec.RegionalReviewedBy||"",overrideDate:rec.RegionalReviewDate||"",overrideNotes:rec.OverrideNotes||rec.RegionalReviewNotes||"",events});
     setAttachmentFiles([]);
-    try{setSavedAttachments(JSON.parse(rec.AttachmentURLs||"[]"))}catch{setSavedAttachments([])}
+    // Load saved attachments — try field first, fall back to document library folder lookup
+    let parsedAttachments=[];
+    try{parsedAttachments=JSON.parse(rec.AttachmentURLs||"[]")}catch{}
+    if(parsedAttachments.length>0){setSavedAttachments(parsedAttachments)}
+    else{
+      setSavedAttachments([]);
+      // Async fallback: check document library for matching folder
+      (async()=>{try{const tok=await auth.getToken();if(tok){const found=await lookupAttachmentsFromDrive(tok,rec);if(found.length>0)setSavedAttachments(found)}}catch{}})();
+    }
     setLastSubmittedId(rec._itemId||null);setSubmitSt("idle");setSubmitErr("");
     setTab("calculator");
   };
