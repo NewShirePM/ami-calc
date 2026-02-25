@@ -25,7 +25,7 @@
 <script type="text/babel" data-type="module">
 const { useState, useEffect, useCallback, useRef } = React;
 
-const APP_VERSION = "3.5.3"; // Correct site URL in emails, reviewer default, admin edit panel, signature name sizing
+const APP_VERSION = "3.5.5"; // Admin corrections send emails, remove fake attachment icons from emails
 console.log(`[AMI] v${APP_VERSION} loaded`);
 const CONFIG = {
   clientId: "32e75ffa-747a-4cf0-8209-6a19150c4547",
@@ -329,8 +329,7 @@ async function sendWorkflowEmail(tok, action, record, ratioInfo, users, properti
       statusLine:"✓ This verification has been approved.",
       statusColor:"#3DA06B",
       actorLabel:"Reviewed by",
-      showAttachmentNote:true,
-      attachmentName:"Approval notice",
+      showAttachmentNote:false,
       notesLabel:"Notes",
     };
   }else if(action==="deny"){
@@ -359,8 +358,7 @@ async function sendWorkflowEmail(tok, action, record, ratioInfo, users, properti
       statusLine:"⚖ Regional has overridden the denial and approved this verification.",
       statusColor:"#6A8EC8",
       actorLabel:"Regional reviewer",
-      showAttachmentNote:true,
-      attachmentName:"Override approval notice",
+      showAttachmentNote:false,
       notesLabel:"Regional Notes",
     };
     // Override the calc result display
@@ -377,8 +375,7 @@ async function sendWorkflowEmail(tok, action, record, ratioInfo, users, properti
       statusLine:"✗ Regional has confirmed the final denial.",
       statusColor:"#D35B4B",
       actorLabel:"Regional reviewer",
-      showAttachmentNote:true,
-      attachmentName:"Final denial notice",
+      showAttachmentNote:false,
       notesLabel:"Regional Notes",
     };
   }else if(action==="send_back"){
@@ -396,6 +393,20 @@ async function sendWorkflowEmail(tok, action, record, ratioInfo, users, properti
       actorLabel:"Returned by",
       showAttachmentNote:false,
       notesLabel:"Reason for Return",
+    };
+  }else if(action==="admin_correction"){
+    // Email: Admin correction → Submitter + all approvers, CC admins
+    const toList=[submitterEmail,...approverEmails].filter(Boolean);
+    emailConfig={
+      to:toList,
+      cc:buildCC(toList),
+      subject:`AMI Verification Corrected: ${subjectBase}`,
+      headerTitle:"Admin Correction Applied",
+      statusLine:`🔧 An admin has corrected this verification. Decision: ${reviewNotes||"Updated"}. Please review and reprint if needed.`,
+      statusColor:"#7B5EA7",
+      actorLabel:"Corrected by",
+      showAttachmentNote:false,
+      notesLabel:"Correction Notes",
     };
   }
 
@@ -1676,7 +1687,18 @@ window.AMICalculator = function AMICalculator(){
     // Admin edit — populate editable fields for completed records
     const COMPLETED=[WF.APPROVED,WF.DENIED,WF.OVERRIDE_APPROVED,WF.FINAL_DENIED,WF.LEASED,WF.TRANSFERRED_ALT,WF.TRANSFERRED_MARKET,WF.REFUSED,WF.CANCELED];
     if(isAdmin&&COMPLETED.includes(rec.Status)){
-      setAdminEditFields({status:rec.Status,reviewNotes:rec.ReviewNotes||"",overrideBy:rec.OverrideBy||rec.RegionalReviewedBy||"",overrideNotes:rec.OverrideNotes||rec.RegionalReviewNotes||"",result:rec.Result||""});
+      // Determine display decision for admin edit dropdown
+      let editDecision=rec.Status;
+      if((rec.Status===WF.DENIED||rec.Status===WF.FINAL_DENIED)&&rec.AltResult==="Approved")editDecision="Alt AMI Approved";
+      else if(rec.Status===WF.DENIED||rec.Status===WF.FINAL_DENIED)editDecision=WF.DENIED;
+      // For lease outcome statuses, map back to the underlying approval decision
+      else if([WF.LEASED,WF.TRANSFERRED_ALT,WF.TRANSFERRED_MARKET,WF.REFUSED,WF.CANCELED].includes(rec.Status)){
+        if(rec.OverrideBy)editDecision=WF.OVERRIDE_APPROVED;
+        else if(rec.AltResult==="Approved")editDecision="Alt AMI Approved";
+        else if(rec.Result?.startsWith("Denied"))editDecision=WF.DENIED;
+        else editDecision=WF.APPROVED;
+      }
+      setAdminEditFields({status:editDecision,reviewNotes:rec.ReviewNotes||"",overrideBy:rec.OverrideBy||rec.RegionalReviewedBy||"",overrideNotes:rec.OverrideNotes||rec.RegionalReviewNotes||"",result:rec.Result||""});
     }else{setAdminEditFields(null)}
     // Load saved attachments — try field first, fall back to document library folder lookup
     let parsedAttachments=[];
@@ -1894,24 +1916,45 @@ window.AMICalculator = function AMICalculator(){
       const tok=await auth.getToken();if(!tok)throw new Error("Auth failed");
       const now=new Date().toISOString();
       const updates={};
-      // Status change
-      if(adminEditFields.status)updates.Status=adminEditFields.status;
+      const decision=adminEditFields.status;
+      // Map decision to SharePoint fields
+      if(decision==="Alt AMI Approved"){
+        // Alt AMI: main status stays Denied, AltResult set to Approved
+        updates.Status=WF.DENIED;
+        updates.AltResult="Approved";
+        updates.Result="Denied - Over Income";
+      }else if(decision===WF.APPROVED){
+        updates.Status=WF.APPROVED;
+        updates.Result="Approved";
+        updates.AltResult=null; // clear alt if previously set
+      }else if(decision===WF.OVERRIDE_APPROVED){
+        updates.Status=WF.OVERRIDE_APPROVED;
+        updates.Result="Override Approved";
+      }else if(decision===WF.DENIED){
+        updates.Status=WF.DENIED;
+        updates.Result=adminEditFields.result||"Denied";
+        updates.AltResult=null;
+      }
       // Review notes
       updates.ReviewNotes=adminEditFields.reviewNotes||"";
       // Override fields
       if(adminEditFields.overrideBy){updates.OverrideBy=adminEditFields.overrideBy;updates.OverrideNotes=adminEditFields.overrideNotes||""}
       if(adminEditFields.overrideNotes)updates.RegionalReviewNotes=adminEditFields.overrideNotes;
-      // Result field update if status changed
-      if(adminEditFields.status===WF.APPROVED)updates.Result="Approved";
-      else if(adminEditFields.status===WF.OVERRIDE_APPROVED)updates.Result="Override Approved";
-      else if(adminEditFields.status===WF.DENIED||adminEditFields.status===WF.FINAL_DENIED)updates.Result=adminEditFields.result||"Denied";
       // Audit event
       const rec=history.find(r=>r._itemId===lastSubmittedId);
-      const auditEvent={action:"Admin Correction",by:auth.user?.name||userEmail,email:userEmail,date:now,notes:`Fields updated by admin`};
+      const auditEvent={action:"Admin Correction",by:auth.user?.name||userEmail,email:userEmail,date:now,notes:`Decision: ${decision}`};
       let updatedJSON="";
       if(rec?.FormDataJSON){try{const snap=JSON.parse(rec.FormDataJSON);snap.auditEvents=[...(snap.auditEvents||[]),auditEvent];updatedJSON=JSON.stringify(snap)}catch{}}
       if(updatedJSON)updates.FormDataJSON=updatedJSON;
       await spUpdate(tok,lastSubmittedId,updates);
+      // Send correction notification email
+      try{
+        const emailRec=buildEmailRecord(rec,pr,fd,total,+rent,countyLimits);
+        emailRec._submittedBy=rec?.SubmittedBy||"";
+        emailRec._reviewedBy=rec?.ReviewedBy||"";
+        const ratioInfo=calcRentToIncomeRatio(total,+rent);
+        await sendWorkflowEmail(tok,"admin_correction",emailRec,ratioInfo,users,properties,auth.user?.name||userEmail,userEmail,decision);
+      }catch(e){console.warn("Correction email failed:",e)}
       setHistKey(k=>k+1);
       alert("Record updated successfully.");
     }catch(e){alert(`Failed to save: ${e.message}`)}
@@ -2125,7 +2168,12 @@ window.AMICalculator = function AMICalculator(){
                 </div>
                 <div style={{fontSize:"10px",color:B.gray400,marginBottom:"10px"}}>Edit review decisions and notes on this completed record. Changes are logged in the audit trail.</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginBottom:"8px"}}>
-                  <F label="Status"><Sel value={adminEditFields.status} onChange={v=>setAdminEditFields({...adminEditFields,status:v})} options={[WF.APPROVED,WF.DENIED,WF.OVERRIDE_APPROVED,WF.FINAL_DENIED,WF.LEASED,WF.TRANSFERRED_ALT,WF.TRANSFERRED_MARKET,WF.REFUSED,WF.CANCELED].map(s=>({value:s,label:s}))} placeholder="Select status"/></F>
+                  <F label="Decision"><Sel value={adminEditFields.status} onChange={v=>setAdminEditFields({...adminEditFields,status:v})} options={[
+                    {value:WF.APPROVED,label:"Approved"},
+                    ...(ami!==0.8?[{value:"Alt AMI Approved",label:"Alt AMI Approved"}]:[]),
+                    {value:WF.OVERRIDE_APPROVED,label:"Override Approved"},
+                    {value:WF.DENIED,label:"Denied"},
+                  ]} placeholder="Select decision"/></F>
                   <F label="Review Notes"><I value={adminEditFields.reviewNotes} onChange={v=>setAdminEditFields({...adminEditFields,reviewNotes:v})} placeholder="Approver review notes"/></F>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
