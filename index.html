@@ -25,7 +25,7 @@
 <script type="text/babel" data-type="module">
 const { useState, useEffect, useCallback, useRef } = React;
 
-const APP_VERSION = "3.5.0"; // Refused status, lease outcome reset, flat denial tracking, conversion dashboard
+const APP_VERSION = "3.5.1"; // Show saved attachments when loading from history, null fix for lease outcome reset
 console.log(`[AMI] v${APP_VERSION} loaded`);
 const CONFIG = {
   clientId: "32e75ffa-747a-4cf0-8209-6a19150c4547",
@@ -1534,6 +1534,7 @@ window.AMICalculator = function AMICalculator(){
   const[other,setOther]=useState([]);
   const[notes,setNotes]=useState("");
   const[attachmentFiles,setAttachmentFiles]=useState([]);
+  const[savedAttachments,setSavedAttachments]=useState([]);
   const[submitSt,setSubmitSt]=useState("idle");
   const[submitErr,setSubmitErr]=useState("");
   const[history,setHistory]=useState([]);
@@ -1648,6 +1649,7 @@ window.AMICalculator = function AMICalculator(){
     const events=savedEvents.length>0?savedEvents:builtEvents;
     setAuditTrail({submittedBy:rec.SubmittedBy||"",submittedByName:rec.SubmittedByName||rec.SubmittedBy||"",submittedDate:rec.DateCompleted||"",reviewedBy:rec.ReviewedBy||"",reviewedByName:rec.ReviewedByName||rec.ReviewedBy||"",reviewDate:rec.ReviewDate||"",reviewNotes:rec.ReviewNotes||"",overrideBy:rec.OverrideBy||rec.RegionalReviewedBy||"",overrideDate:rec.RegionalReviewDate||"",overrideNotes:rec.OverrideNotes||rec.RegionalReviewNotes||"",events});
     setAttachmentFiles([]);
+    try{setSavedAttachments(JSON.parse(rec.AttachmentURLs||"[]"))}catch{setSavedAttachments([])}
     setLastSubmittedId(rec._itemId||null);setSubmitSt("idle");setSubmitErr("");
     setTab("calculator");
   };
@@ -1808,7 +1810,7 @@ window.AMICalculator = function AMICalculator(){
     setApplicants([{name:"",paystubs:["","","",""],paystubFrequency:""}]);
     setOffers([{name:"",hourly:"",hoursPerWeek:"",salary:""}]);
     setBanks([{name:"",deposits:["","",""]}]);
-    setOther([]);setNotes("");setAttachmentFiles([]);setSubmitSt("idle");setSubmitErr("");setOccupantDetails([]);
+    setOther([]);setNotes("");setAttachmentFiles([]);setSavedAttachments([]);setSubmitSt("idle");setSubmitErr("");setOccupantDetails([]);
     setOverrideStatus(null);setOverrideBy("");setOverrideNotesDisplay("");setLastSubmittedId(null);
     setAuditTrail({submittedBy:"",submittedByName:"",submittedDate:"",reviewedBy:"",reviewedByName:"",reviewDate:"",reviewNotes:"",overrideBy:"",overrideDate:"",overrideNotes:"",events:[]});
     setReviewMode(null);setReviewNotes("");setSendBackReason("");setSendBackOther("");
@@ -2004,6 +2006,9 @@ window.AMICalculator = function AMICalculator(){
                 </Card>
               </div>
             </div>
+
+            {/* SAVED ATTACHMENTS — from loaded record */}
+            {savedAttachments.length>0&&<Card style={{marginBottom:"12px"}}><AttachmentList attachments={savedAttachments}/></Card>}
 
             {/* FILE UPLOAD — before decision */}
             {canRun&&pr&&canSubmit&&!reviewMode&&submitSt!=="success"&&(
