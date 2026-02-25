@@ -25,7 +25,7 @@
 <script type="text/babel" data-type="module">
 const { useState, useEffect, useCallback, useRef } = React;
 
-const APP_VERSION = "3.5.2"; // Fallback attachment lookup from document library
+const APP_VERSION = "3.5.3"; // Correct site URL in emails, reviewer default, admin edit panel, signature name sizing
 console.log(`[AMI] v${APP_VERSION} loaded`);
 const CONFIG = {
   clientId: "32e75ffa-747a-4cf0-8209-6a19150c4547",
@@ -234,7 +234,7 @@ ${buildEmailRow("Calc Result",record.calcResult,`color:${resultColor};font-weigh
 ${notes?`<p style="font-size:13px;color:#666"><strong>${record.notesLabel||"Notes"}:</strong> ${notes}</p>`:""}
 ${showAttachmentNote?`<p style="font-size:11px;color:#888;margin-top:12px">📎 ${attachmentName||"Notice"} attached.</p>`:""}
 <div style="margin-top:16px;padding-top:12px;border-top:1px solid #ddd;font-size:11px;color:#888">
-<a href="https://brandyturner815.github.io/ami-calc/" style="color:#CDA04B;font-weight:600">Open AMI Verification</a> to ${statusLine.includes("submitted")?"take action":"view details"}.
+<a href="https://newshirepm.github.io/ami-calc/" style="color:#CDA04B;font-weight:600">Open AMI Verification</a> to ${statusLine.includes("submitted")?"take action":"view details"}.
 </div>
 </div>
 </div>`;
@@ -1454,15 +1454,15 @@ function PrintResult({fd,pr,ar,total,breakdown,reviewer,limitsLabel,overrideStat
           </div>
           <table style={{width:"100%",borderCollapse:"collapse"}}>
             <thead><tr>
-              <th style={{padding:"4px 8px",textAlign:"left",fontSize:"10px",fontWeight:700,color:"#28434C",borderBottom:"1px solid #ddd",width:"30px"}}>#</th>
-              <th style={{padding:"4px 8px",textAlign:"left",fontSize:"10px",fontWeight:700,color:"#28434C",borderBottom:"1px solid #ddd"}}>Printed Name</th>
+              <th style={{padding:"4px 8px",textAlign:"left",fontSize:"10px",fontWeight:700,color:"#28434C",borderBottom:"1px solid #ddd",width:"24px"}}>#</th>
+              <th style={{padding:"4px 8px",textAlign:"left",fontSize:"10px",fontWeight:700,color:"#28434C",borderBottom:"1px solid #ddd",width:"35%"}}>Printed Name</th>
               <th style={{padding:"4px 8px",textAlign:"left",fontSize:"10px",fontWeight:700,color:"#28434C",borderBottom:"1px solid #ddd"}}>Signature</th>
-              <th style={{padding:"4px 8px",textAlign:"left",fontSize:"10px",fontWeight:700,color:"#28434C",borderBottom:"1px solid #ddd",width:"120px"}}>Date</th>
+              <th style={{padding:"4px 8px",textAlign:"left",fontSize:"10px",fontWeight:700,color:"#28434C",borderBottom:"1px solid #ddd",width:"100px"}}>Date</th>
             </tr></thead>
             <tbody>
               {sigRows.map((o,i)=>(
-                <tr key={i}><td style={{padding:"12px 8px",borderBottom:"1px solid #eee",color:"#999"}}>{i+1}</td>
-                  <td style={{padding:"12px 8px",borderBottom:"1px solid #eee",fontWeight:o.name?600:400}}>{o.name||<div style={sigLine}/>}</td>
+                <tr key={i}><td style={{padding:"12px 8px",borderBottom:"1px solid #eee",color:"#999",fontSize:"10px"}}>{i+1}</td>
+                  <td style={{padding:"12px 8px",borderBottom:"1px solid #eee",fontWeight:o.name?700:400,fontSize:"11px",whiteSpace:"nowrap"}}>{o.name||<div style={sigLine}/>}</td>
                   <td style={{padding:"12px 8px",borderBottom:"1px solid #eee"}}><div style={sigLine}/></td>
                   <td style={{padding:"12px 8px",borderBottom:"1px solid #eee"}}><div style={sigLine}/></td>
                 </tr>
@@ -1540,6 +1540,8 @@ window.AMICalculator = function AMICalculator(){
 
   // Calculator form state
   const[reviewer,setReviewer]=useState("");
+  // Default reviewer to current user on fresh forms
+  useEffect(()=>{if(auth.user?.name&&!reviewer&&!lastSubmittedId)setReviewer(auth.user.name)},[auth.user,lastSubmittedId]);
   const[vDate,setVDate]=useState(localToday());
   const[primaryApplicantName,setPAN]=useState("");
   const[propIdx,setPropIdx]=useState("");
@@ -1564,6 +1566,8 @@ window.AMICalculator = function AMICalculator(){
   const[overrideBy,setOverrideBy]=useState("");
   const[overrideNotesDisplay,setOverrideNotesDisplay]=useState("");
   const[lastSubmittedId,setLastSubmittedId]=useState(null);
+  // Admin edit state — for correcting decisions on completed records
+  const[adminEditFields,setAdminEditFields]=useState(null); // null=not editing, object=editable fields
   // Audit trail state (for print form) — events[] holds the full chronological log
   const[auditTrail,setAuditTrail]=useState({submittedBy:"",submittedByName:"",submittedDate:"",reviewedBy:"",reviewedByName:"",reviewDate:"",reviewNotes:"",overrideBy:"",overrideDate:"",overrideNotes:"",events:[]});
   // Review mode — when a reviewer opens a record from the queue into the form
@@ -1669,6 +1673,11 @@ window.AMICalculator = function AMICalculator(){
     const events=savedEvents.length>0?savedEvents:builtEvents;
     setAuditTrail({submittedBy:rec.SubmittedBy||"",submittedByName:rec.SubmittedByName||rec.SubmittedBy||"",submittedDate:rec.DateCompleted||"",reviewedBy:rec.ReviewedBy||"",reviewedByName:rec.ReviewedByName||rec.ReviewedBy||"",reviewDate:rec.ReviewDate||"",reviewNotes:rec.ReviewNotes||"",overrideBy:rec.OverrideBy||rec.RegionalReviewedBy||"",overrideDate:rec.RegionalReviewDate||"",overrideNotes:rec.OverrideNotes||rec.RegionalReviewNotes||"",events});
     setAttachmentFiles([]);
+    // Admin edit — populate editable fields for completed records
+    const COMPLETED=[WF.APPROVED,WF.DENIED,WF.OVERRIDE_APPROVED,WF.FINAL_DENIED,WF.LEASED,WF.TRANSFERRED_ALT,WF.TRANSFERRED_MARKET,WF.REFUSED,WF.CANCELED];
+    if(isAdmin&&COMPLETED.includes(rec.Status)){
+      setAdminEditFields({status:rec.Status,reviewNotes:rec.ReviewNotes||"",overrideBy:rec.OverrideBy||rec.RegionalReviewedBy||"",overrideNotes:rec.OverrideNotes||rec.RegionalReviewNotes||"",result:rec.Result||""});
+    }else{setAdminEditFields(null)}
     // Load saved attachments — try field first, fall back to document library folder lookup
     let parsedAttachments=[];
     try{parsedAttachments=JSON.parse(rec.AttachmentURLs||"[]")}catch{}
@@ -1834,12 +1843,12 @@ window.AMICalculator = function AMICalculator(){
   };
 
   const reset=()=>{
-    setPropIdx("");setUnitCfg(null);setUnitNum("");setOcc("");setRent("");setPAN("");setVDate(localToday());
+    setPropIdx("");setUnitCfg(null);setUnitNum("");setOcc("");setRent("");setPAN("");setVDate(localToday());setReviewer("");
     setApplicants([{name:"",paystubs:["","","",""],paystubFrequency:""}]);
     setOffers([{name:"",hourly:"",hoursPerWeek:"",salary:""}]);
     setBanks([{name:"",deposits:["","",""]}]);
     setOther([]);setNotes("");setAttachmentFiles([]);setSavedAttachments([]);setSubmitSt("idle");setSubmitErr("");setOccupantDetails([]);
-    setOverrideStatus(null);setOverrideBy("");setOverrideNotesDisplay("");setLastSubmittedId(null);
+    setOverrideStatus(null);setOverrideBy("");setOverrideNotesDisplay("");setLastSubmittedId(null);setAdminEditFields(null);
     setAuditTrail({submittedBy:"",submittedByName:"",submittedDate:"",reviewedBy:"",reviewedByName:"",reviewDate:"",reviewNotes:"",overrideBy:"",overrideDate:"",overrideNotes:"",events:[]});
     setReviewMode(null);setReviewNotes("");setSendBackReason("");setSendBackOther("");
   };
@@ -1876,6 +1885,36 @@ window.AMICalculator = function AMICalculator(){
       await spUpdate(tok,itemId,{Status:restoreStatus,LeaseOutcome:null,LeaseOutcomeBy:null,LeaseOutcomeByName:null,LeaseOutcomeDate:null,LeaseOutcomeTier:null,...(updatedJSON?{FormDataJSON:updatedJSON}:{})});
       setHistKey(k=>k+1);
     }catch(e){alert(`Failed to reset: ${e.message}`)}
+  };
+
+  const handleAdminEdit=async()=>{
+    if(!adminEditFields||!lastSubmittedId)return;
+    if(!confirm("Save admin corrections to this record?"))return;
+    try{
+      const tok=await auth.getToken();if(!tok)throw new Error("Auth failed");
+      const now=new Date().toISOString();
+      const updates={};
+      // Status change
+      if(adminEditFields.status)updates.Status=adminEditFields.status;
+      // Review notes
+      updates.ReviewNotes=adminEditFields.reviewNotes||"";
+      // Override fields
+      if(adminEditFields.overrideBy){updates.OverrideBy=adminEditFields.overrideBy;updates.OverrideNotes=adminEditFields.overrideNotes||""}
+      if(adminEditFields.overrideNotes)updates.RegionalReviewNotes=adminEditFields.overrideNotes;
+      // Result field update if status changed
+      if(adminEditFields.status===WF.APPROVED)updates.Result="Approved";
+      else if(adminEditFields.status===WF.OVERRIDE_APPROVED)updates.Result="Override Approved";
+      else if(adminEditFields.status===WF.DENIED||adminEditFields.status===WF.FINAL_DENIED)updates.Result=adminEditFields.result||"Denied";
+      // Audit event
+      const rec=history.find(r=>r._itemId===lastSubmittedId);
+      const auditEvent={action:"Admin Correction",by:auth.user?.name||userEmail,email:userEmail,date:now,notes:`Fields updated by admin`};
+      let updatedJSON="";
+      if(rec?.FormDataJSON){try{const snap=JSON.parse(rec.FormDataJSON);snap.auditEvents=[...(snap.auditEvents||[]),auditEvent];updatedJSON=JSON.stringify(snap)}catch{}}
+      if(updatedJSON)updates.FormDataJSON=updatedJSON;
+      await spUpdate(tok,lastSubmittedId,updates);
+      setHistKey(k=>k+1);
+      alert("Record updated successfully.");
+    }catch(e){alert(`Failed to save: ${e.message}`)}
   };
 
   const handlePrint=()=>{
@@ -2074,6 +2113,25 @@ window.AMICalculator = function AMICalculator(){
                     <Btn v="danger" onClick={async()=>{if(!reviewNotes.trim()){alert("Notes required");return}setReviewActing(true);try{await handleReviewAction(reviewMode.itemId,"final_deny",reviewNotes);setReviewMode(null);setTab("review")}catch(e){alert(e.message)}setReviewActing(false)}} disabled={reviewActing}>✗ Confirm Final Denial</Btn>
                   </div>
                 </div>)}
+              </Card>
+            )}
+
+            {/* ADMIN CORRECTION PANEL — edit decisions on completed records */}
+            {adminEditFields&&isAdmin&&lastSubmittedId&&!reviewMode&&(
+              <Card style={{marginBottom:"12px",borderLeft:`3px solid ${B.purple}`}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
+                  <div style={{...sCss,color:B.purple,marginBottom:0,borderBottom:"none",paddingBottom:0}}>🔧 Admin Correction</div>
+                  <Btn v="success" onClick={handleAdminEdit} style={{padding:"5px 14px",fontSize:"11px"}}>💾 Save Changes</Btn>
+                </div>
+                <div style={{fontSize:"10px",color:B.gray400,marginBottom:"10px"}}>Edit review decisions and notes on this completed record. Changes are logged in the audit trail.</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginBottom:"8px"}}>
+                  <F label="Status"><Sel value={adminEditFields.status} onChange={v=>setAdminEditFields({...adminEditFields,status:v})} options={[WF.APPROVED,WF.DENIED,WF.OVERRIDE_APPROVED,WF.FINAL_DENIED,WF.LEASED,WF.TRANSFERRED_ALT,WF.TRANSFERRED_MARKET,WF.REFUSED,WF.CANCELED].map(s=>({value:s,label:s}))} placeholder="Select status"/></F>
+                  <F label="Review Notes"><I value={adminEditFields.reviewNotes} onChange={v=>setAdminEditFields({...adminEditFields,reviewNotes:v})} placeholder="Approver review notes"/></F>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
+                  <F label="Override By"><I value={adminEditFields.overrideBy} onChange={v=>setAdminEditFields({...adminEditFields,overrideBy:v})} placeholder="Override authorizer name"/></F>
+                  <F label="Override / Regional Notes"><I value={adminEditFields.overrideNotes} onChange={v=>setAdminEditFields({...adminEditFields,overrideNotes:v})} placeholder="Override or regional review notes"/></F>
+                </div>
               </Card>
             )}
 
