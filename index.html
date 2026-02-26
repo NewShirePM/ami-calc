@@ -7,10 +7,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700;800;900&family=Source+Code+Pro:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Source Sans 3', 'Segoe UI', sans-serif; background: #1C3740; }
+  body { font-family: 'Source Sans 3', 'Segoe UI', sans-serif; background: #F7F8F7; }
   #root { min-height: 100vh; }
-  .hist-row:hover { background: rgba(205,160,75,0.06) !important; cursor: pointer; }
-  .file-drop { border: 2px dashed #4A7E91; border-radius: 6px; padding: 16px; text-align: center; transition: all 0.2s; cursor: pointer; }
+  .hist-row:hover { background: #EDF4F7 !important; cursor: pointer; }
+  .file-drop { border: 2px dashed #D0D8DC; border-radius: 6px; padding: 16px; text-align: center; transition: all 0.2s; cursor: pointer; }
   .file-drop:hover, .file-drop.dragover { border-color: #CDA04B; background: rgba(205,160,75,0.06); }
   .queue-card { border-left: 3px solid #CDA04B; transition: border-color 0.2s; }
   .queue-card:hover { border-left-color: #B8922E; }
@@ -25,7 +25,7 @@
 <script type="text/babel" data-type="module">
 const { useState, useEffect, useCallback, useRef } = React;
 
-const APP_VERSION = "3.5.5"; // Admin corrections send emails, remove fake attachment icons from emails
+const APP_VERSION = "4.0.0"; // Admin corrections send emails, remove fake attachment icons from emails
 console.log(`[AMI] v${APP_VERSION} loaded`);
 const CONFIG = {
   clientId: "32e75ffa-747a-4cf0-8209-6a19150c4547",
@@ -118,7 +118,7 @@ const PAY_FREQ=[{label:"Weekly",m:52},{label:"BiWeekly",m:26},{label:"Semi Month
 const OTH_FREQ=[...PAY_FREQ,{label:"Bi Monthly",m:6},{label:"Quarterly",m:4},{label:"Semi Annually",m:2},{label:"Annually",m:1}];
 const OTH_TYPES=["Child Support","SSI/SSDI","Pension","VA Benefits","Unemployment","Self Employment","Interest/Dividends","W2 Verified Employment","Other"];
 
-const B={teal900:"#1C3740",teal800:"#213F4A",teal700:"#28434C",teal600:"#2F5260",teal500:"#3A6577",teal400:"#4A7E91",teal300:"#6FA0B0",teal200:"#A3C5CF",teal100:"#D6E7EC",teal50:"#EDF4F7",gold700:"#9E7B2F",gold600:"#B8922E",gold500:"#CDA04B",gold400:"#D4AF61",gold300:"#E0C680",gold200:"#EDDAAC",gold100:"#F8F0DB",gold50:"#FFFBF0",white:"#F1F3F2",offWhite:"#F7F8F7",gray100:"#E8EAEA",gray200:"#D0D4D4",gray300:"#A8B0B0",gray400:"#7A8585",gray500:"#5A6666",gray600:"#3E4A4A",dark:"#1A2A30",ok:"#3DA06B",okBg:"rgba(61,160,107,0.08)",okBr:"rgba(61,160,107,0.3)",no:"#D35B4B",noBg:"rgba(211,91,75,0.08)",noBr:"rgba(211,91,75,0.3)",wBg:"rgba(205,160,75,0.08)",wBr:"rgba(205,160,75,0.3)",ov:"#6A8EC8",ovBg:"rgba(100,140,200,0.08)",ovBr:"rgba(100,140,200,0.3)",purple:"#7A5EA7",purpleBg:"rgba(122,94,167,0.08)",purpleBr:"rgba(122,94,167,0.3)"};
+const B={teal900:"#1C3740",teal800:"#FFFFFF",teal700:"#28434C",teal600:"#D0D8DC",teal500:"#3A6577",teal400:"#7A8585",teal300:"#28434C",teal200:"#A3C5CF",teal100:"#D6E7EC",teal50:"#EDF4F7",gold700:"#9E7B2F",gold600:"#B8922E",gold500:"#CDA04B",gold400:"#9E7B2F",gold300:"#E0C680",gold200:"#EDDAAC",gold100:"#F8F0DB",gold50:"#FFFBF0",white:"#28434C",offWhite:"#F7F8F7",gray100:"#E8EAEA",gray200:"#D0D4D4",gray300:"#5A6666",gray400:"#7A8585",gray500:"#A8B0B0",gray600:"#3E4A4A",dark:"#1A2A30",ok:"#2D8A5A",okBg:"rgba(45,138,90,0.08)",okBr:"rgba(45,138,90,0.3)",no:"#C44B3B",noBg:"rgba(196,75,59,0.06)",noBr:"rgba(196,75,59,0.25)",wBg:"rgba(205,160,75,0.08)",wBr:"rgba(205,160,75,0.3)",ov:"#4A78B0",ovBg:"rgba(74,120,176,0.08)",ovBr:"rgba(74,120,176,0.3)",purple:"#7A5EA7",purpleBg:"rgba(122,94,167,0.08)",purpleBr:"rgba(122,94,167,0.3)"};
 const fb="'Source Sans 3','Segoe UI',sans-serif", fm="'Source Code Pro','Fira Code',monospace";
 
 // CALC ENGINE
@@ -442,20 +442,20 @@ async function sendWorkflowEmail(tok, action, record, ratioInfo, users, properti
 // ============================================================
 // UI COMPONENTS
 // ============================================================
-const iCss={background:B.teal900,border:`1px solid ${B.teal600}`,borderRadius:"4px",color:B.white,padding:"7px 9px",fontSize:"12.5px",outline:"none",width:"100%",boxSizing:"border-box",transition:"border-color 0.2s",fontFamily:fm};
-const lCss={display:"block",fontSize:"10px",fontWeight:700,color:B.teal300,marginBottom:"3px",textTransform:"uppercase",letterSpacing:"0.6px",fontFamily:fb};
+const iCss={background:"#FFFFFF",border:`1px solid ${B.teal600}`,borderRadius:"4px",color:B.teal700,padding:"7px 9px",fontSize:"12.5px",outline:"none",width:"100%",boxSizing:"border-box",transition:"border-color 0.2s, box-shadow 0.2s",fontFamily:fm};
+const lCss={display:"block",fontSize:"10px",fontWeight:700,color:B.teal700,marginBottom:"3px",textTransform:"uppercase",letterSpacing:"0.6px",fontFamily:fb};
 const sCss={fontSize:"11px",fontWeight:800,color:B.gold500,textTransform:"uppercase",letterSpacing:"1.2px",marginBottom:"10px",fontFamily:fb,borderBottom:`1px solid ${B.teal600}`,paddingBottom:"7px"};
 
 function F({label,children,style}){return<div style={{marginBottom:"8px",...style}}><label style={lCss}>{label}</label>{children}</div>}
-function I({value,onChange,placeholder,type="text",style,disabled}){return<input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} disabled={disabled} style={{...iCss,opacity:disabled?0.5:1,...style}} onFocus={e=>{e.target.style.borderColor=B.gold500}} onBlur={e=>{e.target.style.borderColor=B.teal600}}/>}
+function I({value,onChange,placeholder,type="text",style,disabled}){return<input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} disabled={disabled} style={{...iCss,opacity:disabled?0.5:1,...style}} onFocus={e=>{e.target.style.borderColor=B.gold500;e.target.style.boxShadow="0 0 0 3px rgba(205,160,75,0.15)"}} onBlur={e=>{e.target.style.borderColor=B.teal600;e.target.style.boxShadow="none"}}/>}
 function Sel({value,onChange,options,placeholder,style}){return<select value={value} onChange={e=>onChange(e.target.value)} style={{...iCss,cursor:"pointer",...style}}>{placeholder&&<option value="">{placeholder}</option>}{options.map(o=><option key={typeof o==="string"?o:o.value} value={typeof o==="string"?o:o.value}>{typeof o==="string"?o:o.label}</option>)}</select>}
-function Card({children,style,...rest}){return<div style={{background:B.teal800,border:`1px solid ${B.teal600}`,borderRadius:"6px",padding:"14px",...style}} {...rest}>{children}</div>}
+function Card({children,style,...rest}){return<div style={{background:"#FFFFFF",border:`1px solid ${B.teal600}`,borderRadius:"6px",padding:"14px",boxShadow:"0 1px 3px rgba(28,55,64,0.06)",...style}} {...rest}>{children}</div>}
 function Mon({amount,style}){if(amount==null||isNaN(amount))return<span style={style}>—</span>;return<span style={style}>${Number(amount).toLocaleString("en-US",{minimumFractionDigits:0,maximumFractionDigits:0})}</span>}
 function Btn({children,onClick,v="primary",style,disabled}){
-  const S={primary:{background:B.gold500,color:B.teal900,border:"none",fontWeight:800},secondary:{background:"transparent",color:B.teal300,border:`1px solid ${B.teal600}`},success:{background:B.ok,color:"#fff",border:"none"},danger:{background:B.noBg,color:B.no,border:`1px solid ${B.noBr}`},small:{background:`${B.gold500}18`,color:B.gold500,border:`1px solid ${B.gold500}44`},override:{background:B.ovBg,color:B.ov,border:`1px solid ${B.ovBr}`},purple:{background:B.purpleBg,color:B.purple,border:`1px solid ${B.purpleBr}`},sendback:{background:"rgba(230,140,50,0.08)",color:"#E68C32",border:"1px solid rgba(230,140,50,0.3)"},neutral:{background:"rgba(150,150,150,0.1)",color:"#aaa",border:"1px solid rgba(150,150,150,0.3)"}};
+  const S={primary:{background:B.teal900,color:"#FFFFFF",border:"none",fontWeight:800},secondary:{background:"#FFFFFF",color:B.teal500,border:`1px solid ${B.teal600}`},success:{background:B.ok,color:"#FFFFFF",border:"none"},danger:{background:B.noBg,color:B.no,border:`1px solid ${B.noBr}`},small:{background:B.gold50,color:B.gold700,border:`1px solid ${B.gold500}44`},override:{background:B.ovBg,color:B.ov,border:`1px solid ${B.ovBr}`},purple:{background:B.purpleBg,color:B.purple,border:`1px solid ${B.purpleBr}`},sendback:{background:"rgba(230,140,50,0.08)",color:"#E68C32",border:"1px solid rgba(230,140,50,0.3)"},neutral:{background:"rgba(150,150,150,0.1)",color:"#aaa",border:"1px solid rgba(150,150,150,0.3)"}};
   return<button onClick={onClick} disabled={disabled} style={{...S[v],borderRadius:"4px",padding:"7px 14px",fontSize:"11px",fontWeight:700,cursor:disabled?"not-allowed":"pointer",fontFamily:fb,opacity:disabled?0.5:1,transition:"all 0.15s",letterSpacing:"0.3px",...style}}>{children}</button>;
 }
-function StatusBadge({status}){const wf=WF_COLORS[status]||WF_COLORS[WF.SUBMITTED];return<span style={{display:"inline-block",padding:"2px 8px",borderRadius:"3px",fontSize:"10px",fontWeight:700,background:wf.bg,color:wf.fg,border:`1px solid ${wf.br}`,whiteSpace:"nowrap"}}>{status||"—"}</span>}
+function StatusBadge({status}){const wf=WF_COLORS[status]||WF_COLORS[WF.SUBMITTED];return<span style={{display:"inline-block",padding:"2px 8px",borderRadius:"9999px",fontSize:"10px",fontWeight:700,background:wf.bg,color:wf.fg,border:`1px solid ${wf.br}`,whiteSpace:"nowrap"}}>{status||"—"}</span>}
 function ResultBadge({result,reason,variance,tier,overrideStatus,overrideBy,overrideNotes}){
   const ok=result==="APPROVED",ovr=overrideStatus==="OVERRIDE_APPROVED";
   const bg=ovr?B.ovBg:ok?B.okBg:B.noBg,br=ovr?B.ovBr:ok?B.okBr:B.noBr,clr=ovr?B.ov:ok?B.ok:B.no;
@@ -532,7 +532,7 @@ function FileUploadZone({files,setFiles,disabled}){
         </div>
       )}
       {files.length>0&&<div style={{marginTop:"8px"}}>{files.map((f,i)=>(
-        <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 8px",background:B.teal900,borderRadius:"3px",marginBottom:"4px",border:`1px solid ${B.teal600}`}}>
+        <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 8px",background:B.teal50,borderRadius:"3px",marginBottom:"4px",border:`1px solid ${B.teal600}`}}>
           <span style={{fontSize:"11px",color:B.white}}>{f.name?.endsWith(".pdf")?"📄":"📎"} {f.name} <span style={{fontSize:"9px",color:B.gray400}}>({(f.size/1024).toFixed(0)}KB)</span></span>
           {!disabled&&<button onClick={()=>setFiles(files.filter((_,idx)=>idx!==i))} style={{background:"transparent",border:"none",color:B.no,cursor:"pointer",fontSize:"14px"}}>×</button>}
         </div>
@@ -543,7 +543,7 @@ function FileUploadZone({files,setFiles,disabled}){
 function AttachmentList({attachments}){
   if(!attachments?.length)return null;
   return(<div style={{marginTop:"6px"}}><div style={{fontSize:"10px",fontWeight:700,color:B.teal300,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:"4px"}}>Attached Documents ({attachments.length})</div>
-    {attachments.map((a,i)=>(<a key={i} href={a.url} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:"6px",padding:"3px 8px",background:B.teal900,borderRadius:"3px",marginBottom:"3px",border:`1px solid ${B.teal600}`,textDecoration:"none",fontSize:"11px",color:B.gold400}}>{a.name?.endsWith(".pdf")?"📄":"📎"} {a.name} <span style={{fontSize:"9px",color:B.gray400,marginLeft:"auto"}}>Open ↗</span></a>))}
+    {attachments.map((a,i)=>(<a key={i} href={a.url} target="_blank" rel="noopener noreferrer" style={{display:"flex",alignItems:"center",gap:"6px",padding:"3px 8px",background:B.teal50,borderRadius:"3px",marginBottom:"3px",border:`1px solid ${B.teal600}`,textDecoration:"none",fontSize:"11px",color:B.gold400}}>{a.name?.endsWith(".pdf")?"📄":"📎"} {a.name} <span style={{fontSize:"9px",color:B.gray400,marginLeft:"auto"}}>Open ↗</span></a>))}
   </div>);
 }
 
@@ -661,7 +661,7 @@ function ReviewQueue({history,loading,onAction,onLeaseOutcome,onResetOutcome,onR
           </div>}
           <AttachmentList attachments={attachments}/>
           {r.AltResult&&<div style={{background:B.wBg,border:`1px solid ${B.wBr}`,borderRadius:"4px",padding:"6px 10px",marginTop:"8px",fontSize:"11px"}}><span style={{color:B.gold500,fontWeight:700}}>Alt AMI (80%): </span><span style={{color:r.AltResult==="Approved"?B.ok:B.no,fontWeight:600}}>{r.AltResult}</span></div>}
-          {r.ReviewedByName&&<div style={{background:B.teal900,borderRadius:"4px",padding:"8px 10px",marginTop:"8px",fontSize:"11px",border:`1px solid ${B.teal600}`}}><div style={{color:B.teal300,fontWeight:700,fontSize:"10px",textTransform:"uppercase",marginBottom:"4px"}}>Approver Review</div><div style={{color:B.gray300}}>By: <b style={{color:B.white}}>{r.ReviewedByName}</b> on {r.ReviewDate?new Date(r.ReviewDate).toLocaleDateString("en-US",{month:"short",day:"numeric"}):"—"}</div>{r.ReviewNotes&&<div style={{color:B.gray400,fontStyle:"italic",marginTop:"2px"}}>{r.ReviewNotes}</div>}</div>}
+          {r.ReviewedByName&&<div style={{background:B.teal50,borderRadius:"4px",padding:"8px 10px",marginTop:"8px",fontSize:"11px",border:`1px solid ${B.teal600}`}}><div style={{color:B.teal300,fontWeight:700,fontSize:"10px",textTransform:"uppercase",marginBottom:"4px"}}>Approver Review</div><div style={{color:B.gray300}}>By: <b style={{color:B.white}}>{r.ReviewedByName}</b> on {r.ReviewDate?new Date(r.ReviewDate).toLocaleDateString("en-US",{month:"short",day:"numeric"}):"—"}</div>{r.ReviewNotes&&<div style={{color:B.gray400,fontStyle:"italic",marginTop:"2px"}}>{r.ReviewNotes}</div>}</div>}
           {/* SENT BACK INFO — show reason if this was sent back */}
           {r.SentBackReason&&<div style={{background:"rgba(230,140,50,0.08)",border:"1px solid rgba(230,140,50,0.3)",borderRadius:"4px",padding:"8px 10px",marginTop:"8px",fontSize:"11px"}}><div style={{color:"#E68C32",fontWeight:700,fontSize:"10px",textTransform:"uppercase",marginBottom:"4px"}}>↩ Sent Back</div><div style={{color:B.gray300}}>By: <b style={{color:B.white}}>{r.SentBackByName||"—"}</b> on {r.SentBackDate?new Date(r.SentBackDate).toLocaleDateString("en-US",{month:"short",day:"numeric"}):"—"}</div><div style={{color:"#E68C32",fontWeight:600,marginTop:"2px"}}>Reason: {r.SentBackReason}</div></div>}
           {/* ACTION HINT — review items open in form */}
@@ -863,7 +863,7 @@ function Dashboard({history,properties}){
   }).sort((a,b)=>b.total-a.total);
 
   const pct=(v)=>`${(v*100).toFixed(1)}%`;
-  const kpiBox=(label,value,sub,clr)=>(<div style={{background:B.teal900,border:`1px solid ${B.teal600}`,borderRadius:"6px",padding:"12px 14px",textAlign:"center",flex:1,minWidth:"120px"}}>
+  const kpiBox=(label,value,sub,clr)=>(<div style={{background:"#FFFFFF",border:`1px solid ${B.teal600}`,borderRadius:"6px",padding:"12px 14px",textAlign:"center",flex:1,minWidth:"120px",boxShadow:"0 1px 3px rgba(28,55,64,0.06)"}}>
     <div style={{fontSize:"22px",fontWeight:900,color:clr||B.gold400,fontFamily:fm}}>{value}</div>
     <div style={{fontSize:"10px",fontWeight:700,color:B.teal300,textTransform:"uppercase",letterSpacing:"0.5px",marginTop:"2px"}}>{label}</div>
     {sub&&<div style={{fontSize:"9px",color:B.gray400,marginTop:"2px"}}>{sub}</div>}
@@ -1094,7 +1094,7 @@ function Dashboard({history,properties}){
             </div>
           ))}
           <div style={{flex:1,minWidth:"200px"}}>
-            <div style={{height:"24px",borderRadius:"4px",overflow:"hidden",display:"flex",background:B.teal900,border:`1px solid ${B.teal600}`}}>
+            <div style={{height:"24px",borderRadius:"4px",overflow:"hidden",display:"flex",background:B.gray100,border:`1px solid ${B.teal600}`}}>
               {total>0&&<><div style={{width:`${approvedInit/total*100}%`,background:B.ok,transition:"width 0.3s"}} title={`Approved: ${approvedInit}`}/>
               <div style={{width:`${recoveredAlt/total*100}%`,background:B.gold500,transition:"width 0.3s"}} title={`Recovered: ${recoveredAlt}`}/>
               <div style={{width:`${overrides/total*100}%`,background:B.ov,transition:"width 0.3s"}} title={`Override: ${overrides}`}/>
@@ -1178,7 +1178,7 @@ function AdminPanel({counties,properties,users,onSave,saving,lastSaved,isAdmin})
   return(
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}}>
-        <div style={{display:"flex",background:B.teal900,borderRadius:"4px",border:`1px solid ${B.teal600}`}}>
+        <div style={{display:"flex",background:B.teal50,borderRadius:"4px",border:`1px solid ${B.teal600}`}}>
           {[{key:"limits",label:"Income Limits"},{key:"properties",label:"Properties & Units"},{key:"users",label:"Users & Roles"}].map(t=>
             <button key={t.key} onClick={()=>setATab(t.key)} style={{background:aTab===t.key?`${B.gold500}18`:"transparent",border:"none",color:aTab===t.key?B.gold500:B.teal300,padding:"6px 14px",fontSize:"11px",fontWeight:700,cursor:"pointer",borderRadius:"3px",fontFamily:fb,textTransform:"uppercase",letterSpacing:"0.5px"}}>{t.label}</button>
           )}
@@ -1253,7 +1253,7 @@ function AdminPanel({counties,properties,users,onSave,saving,lastSaved,isAdmin})
                 {isAdmin&&<div style={{display:"flex",gap:"4px"}}><Btn v="small" onClick={()=>addUnit(pi)} style={{padding:"3px 8px",fontSize:"10px"}}>+ Unit</Btn><Btn v="danger" onClick={()=>removeProp(pi)} style={{padding:"3px 8px",fontSize:"10px"}}>Remove</Btn></div>}
               </div>
               {/* PROPERTY MANAGERS */}
-              <div style={{marginBottom:"10px",padding:"8px 10px",background:B.teal900,borderRadius:"4px",border:`1px solid ${B.teal600}`}}>
+              <div style={{marginBottom:"10px",padding:"8px 10px",background:B.teal50,borderRadius:"4px",border:`1px solid ${B.teal600}`}}>
                 <div style={{fontSize:"9px",fontWeight:700,color:B.teal300,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:"6px"}}>Assigned Managers</div>
                 {isAdmin?<div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
                   {managerUsers.map(u=>{
@@ -1972,29 +1972,29 @@ window.AMICalculator = function AMICalculator(){
   const firstFY=getActiveFY(firstCounty);
   const headerLabel=Object.keys(counties).length===1?`${firstFY?.fy||""} HUD Income Limits — ${Object.keys(counties)[0]}`:`${Object.keys(counties).length} Coverage Areas`;
 
-  if(!cfgDone&&auth.user)return(<div style={{background:B.teal900,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:fb}}><div style={{textAlign:"center",color:B.teal300}}><div style={{fontSize:"14px",marginBottom:"6px"}}>Loading configuration...</div><div style={{fontSize:"11px",color:B.gray400}}>Connecting to SharePoint</div></div></div>);
+  if(!cfgDone&&auth.user)return(<div style={{background:"#1C3740",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:fb}}><div style={{textAlign:"center",color:"rgba(255,255,255,0.6)"}}><div style={{fontSize:"14px",marginBottom:"6px"}}>Loading configuration...</div><div style={{fontSize:"11px",color:"rgba(255,255,255,0.35)"}}>Connecting to SharePoint</div></div></div>);
 
   return(
-    <div style={{background:`linear-gradient(180deg,${B.teal900} 0%,${B.teal800} 100%)`,minHeight:"100vh",color:B.white,fontFamily:fb}}>
+    <div style={{background:"#F7F8F7",minHeight:"100vh",color:B.teal700,fontFamily:fb}}>
       {/* HEADER */}
-      <div style={{background:B.teal700,borderBottom:`2px solid ${B.gold500}`,padding:"12px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      <div style={{background:"#1C3740",borderBottom:`2px solid ${B.gold500}`,padding:"12px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div style={{display:"flex",alignItems:"center"}}>
           <HouseIcon/>
           <div>
             <div style={{fontSize:"10px",fontWeight:700,color:B.gold500,textTransform:"uppercase",letterSpacing:"2px"}}>NewShire Property Management</div>
-            <div style={{fontSize:"18px",fontWeight:900,color:B.white,letterSpacing:"-0.2px",lineHeight:"1.1"}}>AMI Verification Calculator</div>
-            <div style={{fontSize:"10px",color:B.teal300,marginTop:"1px"}}>{headerLabel} <span style={{color:B.gray500,fontSize:"9px",marginLeft:"6px"}}>v{APP_VERSION}</span></div>
+            <div style={{fontSize:"18px",fontWeight:900,color:"#FFFFFF",letterSpacing:"-0.2px",lineHeight:"1.1"}}>AMI Verification Calculator</div>
+            <div style={{fontSize:"10px",color:"rgba(255,255,255,0.5)",marginTop:"1px"}}>{headerLabel} <span style={{color:"rgba(255,255,255,0.3)",fontSize:"9px",marginLeft:"6px"}}>v{APP_VERSION}</span></div>
           </div>
         </div>
         <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
-          <div style={{display:"flex",background:B.teal900,borderRadius:"4px",border:`1px solid ${B.teal600}`,marginRight:"8px"}}>
+          <div style={{display:"flex",background:"rgba(255,255,255,0.08)",borderRadius:"4px",border:"1px solid rgba(255,255,255,0.12)",marginRight:"8px"}}>
             {[{key:"calculator",label:"Calculator"},{key:"review",label:"📋 Review Queue"},{key:"dashboard",label:"Dashboard"},{key:"history",label:"History"},{key:"admin",label:"⚙ Admin"}].map(t=>
-              <button key={t.key} onClick={()=>setTab(t.key)} style={{background:tab===t.key?`${B.gold500}18`:"transparent",border:"none",color:tab===t.key?B.gold500:B.teal300,padding:"5px 12px",fontSize:"11px",fontWeight:700,cursor:"pointer",borderRadius:"3px",fontFamily:fb,textTransform:"uppercase",letterSpacing:"0.5px"}}>{t.label}</button>
+              <button key={t.key} onClick={()=>setTab(t.key)} style={{background:tab===t.key?"rgba(255,255,255,0.12)":"transparent",border:"none",color:tab===t.key?"#FFFFFF":"rgba(255,255,255,0.55)",padding:"5px 12px",fontSize:"11px",fontWeight:700,cursor:"pointer",borderRadius:"3px",fontFamily:fb,textTransform:"uppercase",letterSpacing:"0.5px",borderBottom:tab===t.key?`2px solid ${B.gold500}`:"2px solid transparent"}}>{t.label}</button>
             )}
           </div>
           {canRun&&pr&&tab==="calculator"&&<Btn onClick={handlePrint}>Print Result</Btn>}
           {tab==="calculator"&&<Btn v="secondary" onClick={reset}>Reset</Btn>}
-          {auth.user?(<span style={{fontSize:"10px",color:B.teal300,marginLeft:"4px",fontFamily:fb}}>✓ {auth.user.name||auth.user.username}{effectiveRoles.length>0&&<span style={{marginLeft:"4px",opacity:0.7}}>({effectiveRoles.map(r=>ROLE_LABELS[r]).join(" + ")})</span>}</span>)
+          {auth.user?(<span style={{fontSize:"10px",color:"rgba(255,255,255,0.5)",marginLeft:"4px",fontFamily:fb}}>✓ {auth.user.name||auth.user.username}{effectiveRoles.length>0&&<span style={{marginLeft:"4px",opacity:0.7}}>({effectiveRoles.map(r=>ROLE_LABELS[r]).join(" + ")})</span>}</span>)
           :CONFIG.isConfigured?(<Btn v="small" onClick={async()=>{await auth.getToken()}} style={{marginLeft:"4px",padding:"4px 10px",fontSize:"10px"}}>Sign In</Btn>):null}
         </div>
       </div>
@@ -2048,7 +2048,7 @@ window.AMICalculator = function AMICalculator(){
                 <F label="Monthly Rent"><I type="number" value={rent} onChange={setRent} placeholder="0"/></F>
               </div>
               {unitCfg&&countyLimits&&(
-                <div style={{background:B.teal900,border:`1px solid ${B.teal600}`,borderRadius:"4px",padding:"6px 10px",marginTop:"8px",fontSize:"10px",color:B.teal300,fontFamily:fm,display:"flex",gap:"20px",flexWrap:"wrap"}}>
+                <div style={{background:B.teal50,border:`1px solid ${B.teal600}`,borderRadius:"4px",padding:"6px 10px",marginTop:"8px",fontSize:"10px",color:B.teal500,fontFamily:fm,display:"flex",gap:"20px",flexWrap:"wrap"}}>
                   <span>County: <b style={{color:B.white}}>{prop?.county}</b></span>
                   <span>FY: <b style={{color:B.gold400}}>{countyFY}</b></span>
                   <span>BR: <b style={{color:B.white}}>{br}</b></span>
