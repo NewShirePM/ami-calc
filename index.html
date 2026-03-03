@@ -64,14 +64,73 @@ const WF_COLORS = {
 // Send-back reasons (predefined)
 const SEND_BACK_REASONS = ["Missing Income Documentation","Missing Verification Worksheet","Incomplete Verification Worksheet","Other"];
 
-const DEFAULT_USERS = [
-  { email:"bturner@newshirepm.com", name:"Brandy Turner", roles:["approver","admin"] },
-  { email:"cmunson@newshirepm.com", name:"C. Munson", roles:["admin"] },
-  { email:"jwhite@vanrockre.com", name:"J. White", roles:["admin"] },
-];
+const DEFAULT_USERS = [];
 // Migrate old single-role user to multi-role
 function migrateUser(u){const m=Array.isArray(u.roles)?u:{...u,roles:u.role?[u.role]:["manager"]};return m}
 function migrateUsers(users){return(users||[]).map(migrateUser)}
+
+// Map JobTitle to default AMI roles — maintenance roles get no access
+const JOB_TO_AMI_ROLES = {
+  "Owner/Operator": ["admin","approver","manager"],
+  "Regional/Portfolio Manager": ["admin","approver","manager"],
+  "Property Manager": ["manager"],
+  "Assistant Property Manager": ["manager"],
+  "Leasing Agent": ["leaser"],
+  "Virtual Assistant": ["leaser"],
+};
+const AMI_EXCLUDED_JOBS = ["Maintenance Technician","Maintenance Supervisor"];
+
+// AMIRole field overrides — maps single AMIRole choice to full role array
+const AMI_ROLE_OVERRIDE = {
+  "Admin": ["admin","approver","manager"],
+  "Approver": ["approver","manager"],
+  "Manager": ["manager"],
+  "Leaser": ["leaser"],
+  "None": [],
+};
+
+// Load employees from SharePoint Employees list and derive AMI users
+async function loadEmployees(tok) {
+  const lid = await getListId(tok, "Employees");
+  if (!lid) { console.warn("[AMI] Employees list not found"); return null; }
+  const r = await fetch(`${GRAPH}/sites/${CONFIG.siteId}/lists/${lid}/items?$expand=fields&$top=500`, { headers: { Authorization: `Bearer ${tok}` } });
+  if (!r.ok) return null;
+  const d = await r.json();
+  return (d.value || []).map(i => {
+    const f = i.fields;
+    const jobTitle = f.JobTitle || "";
+    const amiRoleField = f.AMIRole || "";
+    // If AMIRole is explicitly set, use it; otherwise derive from JobTitle
+    const roles = amiRoleField && AMI_ROLE_OVERRIDE[amiRoleField] !== undefined
+      ? AMI_ROLE_OVERRIDE[amiRoleField]
+      : (JOB_TO_AMI_ROLES[jobTitle] || []);
+    const active = f.EmployeeActive !== false;
+    const excluded = !amiRoleField && AMI_EXCLUDED_JOBS.includes(jobTitle);
+    const amiProps = (f.AMIProperties || "").split(",").map(s => s.trim()).filter(Boolean);
+    return {
+      _spId: i.id,
+      email: (f.Email || "").toLowerCase(),
+      name: f.Title || "",
+      jobTitle,
+      amiRole: amiRoleField,
+      roles,
+      active,
+      excluded,
+      amiProperties: amiProps,
+    };
+  }).filter(u => u.active && !u.excluded && u.roles.length > 0 && u.email);
+}
+
+// Save AMIProperties back to an employee record
+async function saveEmployeeAMIProperties(tok, spId, propertyNames) {
+  const lid = await getListId(tok, "Employees");
+  if (!lid) throw new Error("Employees list not found");
+  const r = await fetch(`${GRAPH}/sites/${CONFIG.siteId}/lists/${lid}/items/${spId}`, {
+    method: "PATCH", headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ fields: { AMIProperties: propertyNames.join(", ") } })
+  });
+  if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e?.error?.message || `Error ${r.status}`); }
+}
 
 const DEFAULT_COUNTIES = {
   "Spartanburg County, SC": {
@@ -162,7 +221,7 @@ async function spUpdate(tok,itemId,fields){const lid=await getListId(tok,CONFIG.
 async function spDelete(tok,itemId){const lid=await getListId(tok,CONFIG.listName);if(!lid)throw new Error("List not found");const r=await fetch(`${GRAPH}/sites/${CONFIG.siteId}/lists/${lid}/items/${itemId}`,{method:"DELETE",headers:{Authorization:`Bearer ${tok}`}});if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e?.error?.message||`Error ${r.status}`)}}
 async function spHistory(tok,n=200){const lid=await getListId(tok,CONFIG.listName);if(!lid)return[];const r=await fetch(`${GRAPH}/sites/${CONFIG.siteId}/lists/${lid}/items?$expand=fields&$top=${n}`,{headers:{Authorization:`Bearer ${tok}`}});if(!r.ok)return[];const d=await r.json();return(d.value||[]).map(i=>({...i.fields,_itemId:i.id})).sort((a,b)=>new Date(b.DateCompleted||0)-new Date(a.DateCompleted||0))}
 async function cfgLoad(tok){const lid=await getListId(tok,CONFIG.configListName);if(!lid)return null;const r=await fetch(`${GRAPH}/sites/${CONFIG.siteId}/lists/${lid}/items?$expand=fields&$top=10&$orderby=fields/Modified desc`,{headers:{Authorization:`Bearer ${tok}`}});if(!r.ok)return null;const d=await r.json();if(!d.value?.length)return null;const f=d.value[0].fields;try{const counties=JSON.parse(f.IncomeLimitsJSON),properties=JSON.parse(f.PropertiesJSON);let users=null;try{users=JSON.parse(f.ModifiedByName.includes("[")?f.ModifiedByName:"{}")}catch{}if(!users&&f.Title?.startsWith("Config")){}return{itemId:d.value[0].id,counties,properties,users,lastModified:f.Modified}}catch{return null}}
-async function cfgSave(tok,counties,properties,users,modBy){const lid=await getListId(tok,CONFIG.configListName);if(!lid)throw new Error("Config list not found");const fields={Title:`Config ${localToday()}`,IncomeLimitsJSON:JSON.stringify({counties,users}),PropertiesJSON:JSON.stringify(properties),ModifiedByName:modBy};const existing=await cfgLoad(tok);if(existing?.itemId){const r=await fetch(`${GRAPH}/sites/${CONFIG.siteId}/lists/${lid}/items/${existing.itemId}`,{method:"PATCH",headers:{Authorization:`Bearer ${tok}`,"Content-Type":"application/json"},body:JSON.stringify({fields})});if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e?.error?.message||`Error ${r.status}`)}return}const r=await fetch(`${GRAPH}/sites/${CONFIG.siteId}/lists/${lid}/items`,{method:"POST",headers:{Authorization:`Bearer ${tok}`,"Content-Type":"application/json"},body:JSON.stringify({fields})});if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e?.error?.message||`Error ${r.status}`)}}
+async function cfgSave(tok,counties,properties,users,modBy){const lid=await getListId(tok,CONFIG.configListName);if(!lid)throw new Error("Config list not found");const fields={Title:`Config ${localToday()}`,IncomeLimitsJSON:JSON.stringify({counties}),PropertiesJSON:JSON.stringify(properties),ModifiedByName:modBy};const existing=await cfgLoad(tok);if(existing?.itemId){const r=await fetch(`${GRAPH}/sites/${CONFIG.siteId}/lists/${lid}/items/${existing.itemId}`,{method:"PATCH",headers:{Authorization:`Bearer ${tok}`,"Content-Type":"application/json"},body:JSON.stringify({fields})});if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e?.error?.message||`Error ${r.status}`)}return}const r=await fetch(`${GRAPH}/sites/${CONFIG.siteId}/lists/${lid}/items`,{method:"POST",headers:{Authorization:`Bearer ${tok}`,"Content-Type":"application/json"},body:JSON.stringify({fields})});if(!r.ok){const e=await r.json().catch(()=>({}));throw new Error(e?.error?.message||`Error ${r.status}`)}}
 
 // Document library — upload files to submission folders
 async function getDriveId(tok){const r=await fetch(`${GRAPH}/sites/${CONFIG.siteId}/drives`,{headers:{Authorization:`Bearer ${tok}`}});if(!r.ok)return null;const d=await r.json();return d.value?.find(dr=>dr.name===CONFIG.docLibName)?.id||null}
@@ -273,16 +332,16 @@ async function sendNotificationEmail(tok, {from, to, cc, subject, htmlBody, impo
 // Get all approver/admin emails from user list
 function getApproverEmails(users){return(users||[]).filter(u=>(u.roles||[]).some(r=>r==="approver"||r==="admin")).map(u=>u.email)}
 function getAdminEmails(users){return(users||[]).filter(u=>(u.roles||[]).includes("admin")).map(u=>u.email)}
-// Get managers assigned to a specific property (reads from property.managers array)
+// Get managers assigned to a specific property (reads from employee amiProperties)
 function getPropertyManagerEmails(users,properties,propertyName){
-  const prop=(properties||[]).find(p=>p.name===propertyName);
-  return(prop?.managers||[]).filter(Boolean);
+  return(users||[]).filter(u=>(u.roles||[]).includes("manager")&&(u.amiProperties||[]).some(p=>p.toLowerCase()===propertyName.toLowerCase())).map(u=>u.email);
 }
 // Get list of property names assigned to a manager by email
 function getManagerProperties(users,properties,email){
   if(!email)return[];
   const e=email.toLowerCase();
-  return(properties||[]).filter(p=>(p.managers||[]).some(m=>m.toLowerCase()===e)).map(p=>p.name);
+  const user=(users||[]).find(u=>u.email.toLowerCase()===e);
+  return user?.amiProperties||[];
 }
 
 // Send workflow notification — called after status changes
@@ -1125,21 +1184,27 @@ function AdminPanel({counties,properties,users,onSave,saving,lastSaved,isAdmin})
   const[aTab,setATab]=useState("limits");
   const[cEdit,setCEdit]=useState(JSON.parse(JSON.stringify(counties)));
   const[pEdit,setPEdit]=useState(JSON.parse(JSON.stringify(properties)));
-  const[uEdit,setUEdit]=useState(JSON.parse(JSON.stringify(users)));
+  // Build initial property→manager mapping from employee amiProperties
+  const buildPropManagers=()=>{
+    const pm=JSON.parse(JSON.stringify(properties));
+    pm.forEach(p=>{p.managers=(users||[]).filter(u=>(u.amiProperties||[]).some(ap=>ap.toLowerCase()===p.name.toLowerCase())).map(u=>u.email)});
+    return pm;
+  };
+  const[pEditWithMgrs,setPEditWithMgrs]=useState(buildPropManagers());
   const[dirty,setDirty]=useState(false);
   const[selCounty,setSelCounty]=useState(Object.keys(counties)[0]||"");
   const[selFYIdx,setSelFYIdx]=useState(0); // 0 = most recent (active)
   const[newCounty,setNewCounty]=useState("");
-  const[newUserEmail,setNewUserEmail]=useState("");
-  const[newUserName,setNewUserName]=useState("");
-  const[newUserRoles,setNewUserRoles]=useState(["leaser"]);
 
   useEffect(()=>{setCEdit(JSON.parse(JSON.stringify(counties)))},[counties]);
-  useEffect(()=>{setPEdit(JSON.parse(JSON.stringify(properties)))},[properties]);
-  useEffect(()=>{setUEdit(JSON.parse(JSON.stringify(users)))},[users]);
+  useEffect(()=>{setPEdit(JSON.parse(JSON.stringify(properties)));setPEditWithMgrs(buildPropManagers())},[properties,users]);
 
   const mk=()=>setDirty(true);
-  const save=()=>{onSave(cEdit,pEdit,uEdit);setDirty(false)};
+  const save=()=>{
+    // Merge manager assignments from pEditWithMgrs into pEdit for save
+    const mergedProps=pEdit.map((p,i)=>({...p,managers:pEditWithMgrs[i]?.managers||[]}));
+    onSave(cEdit,mergedProps,users);setDirty(false);
+  };
   const countyNames=Object.keys(cEdit);
 
   // FY-aware county editors
@@ -1171,14 +1236,11 @@ function AdminPanel({counties,properties,users,onSave,saving,lastSaved,isAdmin})
   const updateUnitAmi=(pi,ui,val)=>{const n=JSON.parse(JSON.stringify(pEdit));n[pi].units[ui].ami=val===""?0:+val;setPEdit(n);mk()};
   const addUnit=(pi)=>{const n=JSON.parse(JSON.stringify(pEdit));n[pi].units.push({bedrooms:1,ami:0.6,maxRent:0,marketRent:0,count:1});setPEdit(n);mk()};
   const removeUnit=(pi,ui)=>{const n=JSON.parse(JSON.stringify(pEdit));n[pi].units=n[pi].units.filter((_,i)=>i!==ui);setPEdit(n);mk()};
-  const addProp=()=>{setPEdit([...pEdit,{name:"New Property",county:countyNames[0]||"",managers:[],units:[{bedrooms:1,ami:0.6,maxRent:0,marketRent:0,count:1}]}]);mk()};
-  const removeProp=(pi)=>{if(!confirm(`Remove "${pEdit[pi].name}"?`))return;setPEdit(pEdit.filter((_,i)=>i!==pi));mk()};
+  const addProp=()=>{const np={name:"New Property",county:countyNames[0]||"",units:[{bedrooms:1,ami:0.6,maxRent:0,marketRent:0,count:1}]};setPEdit([...pEdit,np]);setPEditWithMgrs([...pEditWithMgrs,{...np,managers:[]}]);mk()};
+  const removeProp=(pi)=>{if(!confirm(`Remove "${pEdit[pi].name}"?`))return;setPEdit(pEdit.filter((_,i)=>i!==pi));setPEditWithMgrs(pEditWithMgrs.filter((_,i)=>i!==pi));mk()};
 
   // User editors — multi-role
-  const toggleUserRole=(idx,role)=>{const n=JSON.parse(JSON.stringify(uEdit));const roles=n[idx].roles||[];if(roles.includes(role)){n[idx].roles=roles.filter(r=>r!==role);if(!n[idx].roles.length)n[idx].roles=["leaser"]}else{n[idx].roles=[...roles,role]};setUEdit(n);mk()};
-  const addUser=()=>{if(!newUserEmail.trim())return;if(uEdit.find(u=>u.email.toLowerCase()===newUserEmail.toLowerCase()))return alert("User already exists");setUEdit([...uEdit,{email:newUserEmail.toLowerCase().trim(),name:newUserName.trim()||newUserEmail.split("@")[0],roles:[...newUserRoles]}]);setNewUserEmail("");setNewUserName("");setNewUserRoles(["manager"]);mk()};
-  const removeUser=(idx)=>{if(!confirm(`Remove ${uEdit[idx].name}?`))return;setUEdit(uEdit.filter((_,i)=>i!==idx));mk()};
-  const toggleNewRole=(role)=>{setNewUserRoles(prev=>prev.includes(role)?prev.filter(r=>r!==role):[...prev,role])};
+  // User roles are now derived from JobTitle — no editing needed
 
   return(
     <div>
@@ -1246,8 +1308,8 @@ function AdminPanel({counties,properties,users,onSave,saving,lastSaved,isAdmin})
       {aTab==="properties"&&(
         <div>
           {pEdit.map((prop,pi)=>{
-            const managerUsers=uEdit.filter(u=>(u.roles||[]).includes("manager"));
-            const propManagers=prop.managers||[];
+            const managerUsers=(users||[]).filter(u=>(u.roles||[]).includes("manager"));
+            const propManagers=pEditWithMgrs[pi]?.managers||[];
             return(
             <Card key={pi} style={{marginBottom:"10px"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"8px"}}>
@@ -1265,16 +1327,16 @@ function AdminPanel({counties,properties,users,onSave,saving,lastSaved,isAdmin})
                     const checked=propManagers.includes(u.email);
                     return<label key={u.email} style={{display:"flex",alignItems:"center",gap:"4px",fontSize:"11px",color:checked?B.gold400:B.gray400,cursor:"pointer"}}>
                       <input type="checkbox" checked={checked} onChange={()=>{
-                        const n=JSON.parse(JSON.stringify(pEdit));
+                        const n=JSON.parse(JSON.stringify(pEditWithMgrs));
                         const mgrs=n[pi].managers||[];
                         n[pi].managers=checked?mgrs.filter(e=>e!==u.email):[...mgrs,u.email];
-                        setPEdit(n);mk();
+                        setPEditWithMgrs(n);mk();
                       }} style={{accentColor:B.gold500,width:"13px",height:"13px"}}/>
                       {u.name} <span style={{fontSize:"9px",color:B.gray600}}>({u.email})</span>
                     </label>;
                   })}
-                  {managerUsers.length===0&&<span style={{fontSize:"10px",color:B.gray600}}>No users with Manager role — add one in Users & Roles tab</span>}
-                </div>:<div style={{fontSize:"11px",color:B.gray300}}>{propManagers.length?propManagers.map(e=>{const u=uEdit.find(u=>u.email===e);return u?u.name:e}).join(", "):<span style={{color:B.gray600}}>None assigned</span>}</div>}
+                  {managerUsers.length===0&&<span style={{fontSize:"10px",color:B.gray600}}>No employees with Manager-level job titles found</span>}
+                </div>:<div style={{fontSize:"11px",color:B.gray300}}>{propManagers.length?propManagers.map(e=>{const u=(users||[]).find(u=>u.email===e);return u?u.name:e}).join(", "):<span style={{color:B.gray600}}>None assigned</span>}</div>}
               </div>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:"11px"}}>
                 <thead><tr style={{borderBottom:`1px solid ${B.teal600}`}}>{["BR","AMI %","Max AMI Rent","Market Rent","Unit Count",isAdmin?"":""].filter(Boolean).map((h,i)=><th key={i} style={{padding:"4px 6px",textAlign:i>1?"center":"left",color:B.teal300,fontWeight:700,fontSize:"9px",textTransform:"uppercase"}}>{h}</th>)}</tr></thead>
@@ -1295,37 +1357,33 @@ function AdminPanel({counties,properties,users,onSave,saving,lastSaved,isAdmin})
         </div>
       )}
 
-      {/* USERS & ROLES */}
+      {/* USERS & ROLES — derived from Job Title, overridable via AMI Role on Employees list */}
       {aTab==="users"&&(
         <Card>
           <div style={sCss}>Users & Roles</div>
           <div style={{fontSize:"10px",color:B.teal300,marginBottom:"12px"}}>
-            Users can have <b>multiple roles</b>. <b>Leaser</b> — fill form & submit for review | <b>Manager</b> — reviews leaser submissions, submits own (assign to properties in Properties tab) | <b>Approver</b> — review & approve/deny/send back | <b>Admin</b> — override denials, edit config, manage users
+            Roles are derived from <b>Job Title</b> unless an <b>AMI Role</b> override is set on the Employees list. To elevate a Property Manager to Approver, set their AMI Role field in the Employees list or NewShire University admin.
           </div>
           <table style={{width:"100%",borderCollapse:"collapse",fontSize:"11px",marginBottom:"12px"}}>
             <thead><tr style={{borderBottom:`2px solid ${B.gold500}`}}>
-              {["Email","Name","Leaser","Manager","Approver","Admin",isAdmin?"":""].filter(Boolean).map((h,i)=><th key={i} style={{padding:"6px 8px",textAlign:i>1?"center":"left",color:B.gold500,fontWeight:700,fontSize:"10px",fontFamily:fb,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>)}
+              {["Name","Job Title","AMI Role","Leaser","Manager","Approver","Admin","Properties"].map((h,i)=><th key={i} style={{padding:"6px 8px",textAlign:i>2?"center":"left",color:B.gold500,fontWeight:700,fontSize:"10px",fontFamily:fb,textTransform:"uppercase",whiteSpace:"nowrap"}}>{h}</th>)}
             </tr></thead>
-            <tbody>{uEdit.map((u,i)=>{
-              const roles=u.roles||[u.role||"leaser"];
+            <tbody>{(users||[]).map((u,i)=>{
+              const roles=u.roles||[];
+              const props=u.amiProperties||[];
+              const isOverride=!!u.amiRole;
               return(<tr key={i} style={{borderBottom:`1px solid ${B.teal600}33`}}>
-                <td style={{padding:"5px 8px",color:B.white,fontFamily:fm,fontSize:"11px"}}>{u.email}</td>
-                <td style={{padding:"5px 8px",color:B.white}}>{u.name}</td>
+                <td style={{padding:"5px 8px",color:B.white,fontWeight:600}}>{u.name}</td>
+                <td style={{padding:"5px 8px",color:B.teal300,fontSize:"11px"}}>{u.jobTitle||"—"}</td>
+                <td style={{padding:"5px 8px",fontSize:"11px",color:isOverride?B.gold400:B.gray600}}>{isOverride?u.amiRole:<span style={{fontStyle:"italic"}}>auto</span>}</td>
                 {["leaser","manager","approver","admin"].map(role=>(
                   <td key={role} style={{padding:"5px 8px",textAlign:"center"}}>
-                    {isAdmin?<input type="checkbox" checked={roles.includes(role)} onChange={()=>toggleUserRole(i,role)} style={{cursor:"pointer",accentColor:B.gold500}}/>
-                    :<span style={{color:roles.includes(role)?B.ok:B.gray600,fontSize:"14px"}}>{roles.includes(role)?"✓":"—"}</span>}
+                    <span style={{color:roles.includes(role)?B.ok:B.gray600,fontSize:"14px"}}>{roles.includes(role)?"✓":"—"}</span>
                   </td>))}
-                {isAdmin&&<td style={{padding:"5px 8px",textAlign:"center"}}><button onClick={()=>removeUser(i)} style={{background:"transparent",border:"none",color:B.no,cursor:"pointer",fontSize:"13px"}}>×</button></td>}
+                <td style={{padding:"5px 8px",textAlign:"center",fontSize:"10px",color:B.teal300}}>{props.length?props.join(", "):"—"}</td>
               </tr>);
             })}</tbody>
           </table>
-          {isAdmin&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto auto",gap:"6px",alignItems:"end"}}>
-            <F label="Email"><I value={newUserEmail} onChange={setNewUserEmail} placeholder="user@company.com"/></F>
-            <F label="Display Name"><I value={newUserName} onChange={setNewUserName} placeholder="Full name"/></F>
-            <F label="Roles"><div style={{display:"flex",gap:"6px",padding:"7px 0"}}>{["leaser","manager","approver","admin"].map(r=>(<label key={r} style={{display:"flex",alignItems:"center",gap:"3px",fontSize:"11px",color:newUserRoles.includes(r)?B.gold400:B.gray400,cursor:"pointer"}}><input type="checkbox" checked={newUserRoles.includes(r)} onChange={()=>toggleNewRole(r)} style={{accentColor:B.gold500}}/>{ROLE_LABELS[r]}</label>))}</div></F>
-            <Btn onClick={addUser} style={{marginBottom:"8px"}}>Add User</Btn>
-          </div>}
         </Card>
       )}
     </div>
@@ -1533,23 +1591,49 @@ window.AMICalculator = function AMICalculator(){
     cfgLoadedRef.current=true;
     (async()=>{try{
       const tok=await auth.getToken();
-      if(tok){const cfg=await cfgLoad(tok);if(cfg){
-        if(cfg.counties?.counties){setCounties(migrateAllCounties(cfg.counties.counties));if(cfg.counties.users)setUsers(migrateUsers(cfg.counties.users))}
-        else if(cfg.counties&&!cfg.counties.counties){setCounties(migrateAllCounties({"Spartanburg County, SC":cfg.counties}));if(cfg.counties.users)setUsers(migrateUsers(cfg.counties.users))}
+      if(tok){
+        // Load employees from master Employees list
+        const emps=await loadEmployees(tok);
+        if(emps&&emps.length>0){setUsers(emps);console.log("[AMI] Loaded",emps.length,"users from Employees list")}
+        else{console.warn("[AMI] No employees loaded — using defaults")}
+        // Load config (income limits + properties only)
+        const cfg=await cfgLoad(tok);if(cfg){
+        if(cfg.counties?.counties){setCounties(migrateAllCounties(cfg.counties.counties))}
+        else if(cfg.counties&&!cfg.counties.counties){setCounties(migrateAllCounties({"Spartanburg County, SC":cfg.counties}))}
         if(cfg.properties)setProperties(cfg.properties);
         setCfgSaved(`${new Date(cfg.lastModified).toLocaleDateString("en-US",{month:"short",day:"numeric"})}`);
-        console.log("[AMI] Config loaded. Users:",cfg.counties?.users?.length||0,"Props:",cfg.properties?.length||0);
+        console.log("[AMI] Config loaded. Props:",cfg.properties?.length||0);
       }else{console.warn("[AMI] No config found in SharePoint — using defaults")}}
     }catch(e){console.error("Cfg load:",e)}setCfgDone(true)})();
   },[auth.user]);
 
   // Admin save
   const handleAdminSave=async(newC,newP,newU)=>{
-    if(!CONFIG.isConfigured){setCounties(newC);setProperties(newP);setUsers(newU);return}
+    if(!CONFIG.isConfigured){setCounties(newC);setProperties(newP);return}
     setAdminSaving(true);
     try{const tok=await auth.getToken();if(!tok)throw new Error("Auth failed");
+      // Save config (counties + properties only, no users)
       await cfgSave(tok,newC,newP,newU,auth.user?.name||userEmail||"Unknown");
-      setCounties(newC);setProperties(newP);setUsers(newU);setCfgSaved("Just now");
+      // Save AMIProperties to each employee record
+      const propNames=newP.map(p=>p.name);
+      for(const u of newU){
+        if(!u._spId)continue;
+        // Build list of properties this user is assigned to
+        const assignedProps=propNames.filter(pn=>{
+          const prop=newP.find(p=>p.name===pn);
+          return(prop?.managers||[]).some(m=>m.toLowerCase()===u.email.toLowerCase());
+        });
+        // Only update if changed
+        const current=(u.amiProperties||[]).sort().join(",");
+        const updated=assignedProps.sort().join(",");
+        if(current!==updated){
+          await saveEmployeeAMIProperties(tok,u._spId,assignedProps);
+        }
+      }
+      // Reload employees to reflect saved state
+      const emps=await loadEmployees(tok);
+      if(emps)setUsers(emps);
+      setCounties(newC);setProperties(newP);setCfgSaved("Just now");
     }catch(e){alert(`Save failed: ${e.message}`)}
     setAdminSaving(false);
   };
@@ -2018,7 +2102,7 @@ window.AMICalculator = function AMICalculator(){
           <Card><div style={{textAlign:"center",padding:"40px",color:B.teal300}}>
             <div style={{fontSize:"24px",marginBottom:"8px"}}>🚫</div>
             <div style={{fontSize:"14px",fontWeight:700,marginBottom:"8px"}}>No Access</div>
-            <div style={{fontSize:"12px",color:B.gray400}}>Your account ({userEmail}) has not been assigned a role. Contact an administrator.</div>
+            <div style={{fontSize:"12px",color:B.gray400}}>Your account ({userEmail}) does not have AMI access. Only non-maintenance roles have access to this tool.</div>
           </div></Card>
         ):<>
 
